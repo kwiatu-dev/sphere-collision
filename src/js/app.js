@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import * as dat from 'dat.gui';
 import {BoxLineGeometry} from 'three/examples/jsm/geometries/BoxLineGeometry.js';
+import { DragControls } from 'three/examples/jsm/controls/DragControls.js';
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -19,7 +20,8 @@ camera.position.set(0, 5, 10);
 camera.lookAt(0, 0, 0);
 orbit.update();
 
-scene.add(new THREE.HemisphereLight(0x606060, 0x404040));
+const hemisphereLight = new THREE.HemisphereLight(0x606060, 0x404040)
+scene.add(hemisphereLight);
 
 const light = new THREE.DirectionalLight(0xffffff, 0.8);
 light.position.set(1, 1, 3);
@@ -33,14 +35,6 @@ light.shadow.camera.far = 10;
 
 const dLightHelper = new THREE.DirectionalLightHelper(light, 5);
 scene.add(dLightHelper);
-
-const planeGeometry = new THREE.PlaneGeometry(6, 6, 10, 10);
-const planeMaterial = new THREE.MeshStandardMaterial({color: '#ffffff', side: THREE.DoubleSide});
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-scene.add(plane);
-plane.rotateX(-0.5 * Math.PI);
-plane.receiveShadow = true;
-
 
 const axesHelper = new THREE.AxesHelper(10);
 scene.add(axesHelper);
@@ -60,8 +54,26 @@ const options = {
         object: null,
         segments: 3,
         radius: 0.08,
-    }
+    },
+    control:{
+        object: null,
+    },
+    gui:{
+        object: null,
+    },
+    shadows: true,
+    directLightIntensity: 0.8,
+    hemisphereLightIntensity: 1,
+    axesHelper: true,
+    dLightHelper: true,
+    gravity: 9.8,
+    orbitControl: true,
+    dragControl: true,
 }
+
+options.gui['Reset objects'] = () => {
+    resetObjects();
+};
 
 options.geometry.object = new THREE.IcosahedronGeometry(options.geometry.radius, options.geometry.segments);
 
@@ -73,6 +85,25 @@ const createRoom = () => {
 
     options.room.object.geometry.translate(0, options.room.size / 2, 0);
     scene.add(options.room.object);
+
+    const planeGeometry = new THREE.PlaneGeometry(options.room.size, options.room.size, options.room.segments, options.room.segments);
+    const planeMaterial = new THREE.MeshStandardMaterial({color: '#ffffff', side: THREE.DoubleSide});
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+    scene.add(plane);
+    plane.rotateX(-0.5 * Math.PI);
+    plane.receiveShadow = true;
+}
+
+const removeRoom = () => {
+    removeObjectsFromRoom();
+    scene.remove(options.room.object);
+}
+
+const resetRoom = () =>{
+    removeRoom();
+    createRoom();
+    addObjectsToRoom();
+    controlObjects();
 }
 
 function randomNumber(min, max) {
@@ -95,19 +126,34 @@ const addObjectsToRoom = () => {
         object.userData.velocity.x = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
         object.userData.velocity.y = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
         object.userData.velocity.z = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
+        object.userData.hold = false;
 
         options.room.object.add(object);
         object.castShadow = true;
+        object.receiveShadow = true;
     }
+}
+
+const removeObjectsFromRoom = () => {
+    while(options.room.object.children.length){
+        options.room.object.remove(options.room.object.children[0]);
+    }
+}
+
+const resetObjects = () => {
+    removeObjectsFromRoom();
+    addObjectsToRoom();
 }
 
 const clock = new THREE.Clock();
 
 const moveObjects = (delta) =>{
     for(const object of options.room.object.children){
-        object.position.x += object.userData.velocity.x * delta;
-        object.position.y += object.userData.velocity.y * delta;
-        object.position.z += object.userData.velocity.z * delta;
+        if(object.userData.hold === false){
+            object.position.x += object.userData.velocity.x * delta;
+            object.position.y += object.userData.velocity.y * delta;
+            object.position.z += object.userData.velocity.z * delta;
+        }
 
         controlBoxCollision(object);
         controlObjectCollision(object);
@@ -163,7 +209,95 @@ const controlObjectCollision = (object) => {
 };
 
 const addGravity = (object, delta) => {
-    object.userData.velocity.y -= 9.8 * delta;
+    if(object.userData.hold === false){
+        object.userData.velocity.y -= options.gravity * delta;
+    }
+}
+
+const dragStartCallback = (_event) => {
+    _event.object.userData.hold = true;
+    orbit.enabled = false;
+}
+
+const dragEndCallback = (_event) => {
+    _event.object.userData.hold = false;
+    orbit.enabled = options.orbitControl ? true : false;
+}
+
+const controlObjects = () =>{
+    options.control.object = new DragControls(options.room.object.children, camera, renderer.domElement);  
+    options.control.object.addEventListener('dragstart', dragStartCallback);    
+    options.control.object.addEventListener('dragend', dragEndCallback);            
+}
+
+const createInterface = () => {
+    options.gui.object = new dat.GUI();
+    const primaryOptions = options.gui.object.addFolder('Options');
+
+    primaryOptions.add(options, 'shadows').onChange((e) => {
+        light.castShadow = e;
+    });
+
+    primaryOptions.add(options, 'directLightIntensity', 0, 1).onChange((e) => {
+        light.intensity = e;
+    });
+
+    primaryOptions.add(options, 'hemisphereLightIntensity', 0, 1).onChange((e) => {
+        hemisphereLight.intensity = e;
+    });
+
+    primaryOptions.add(options, 'orbitControl', 0, 1).onChange((e) => {
+        orbit.enabled = e;
+    });
+
+    primaryOptions.add(options, 'dragControl', 0, 1).onChange((e) => {
+        options.control.object.enabled = e;
+    });
+
+    const objectControlls = options.gui.object.addFolder('Objects');
+
+    objectControlls.add(options.gui, 'Reset objects');
+
+    objectControlls.add(options, 'count').onChange((e) => {
+        options.count = e;
+        resetObjects();
+    });
+
+    const roomControls = options.gui.object.addFolder('Room');
+
+    roomControls.add(options.room, 'size').onChange((e) => {
+        options.room.size = e;
+        resetRoom();
+    });
+
+    roomControls.add(options.room, 'segments').onChange((e) => {
+        options.room.segments = e;
+        resetRoom();
+    });
+
+    const helpers = options.gui.object.addFolder('Helpers');
+
+    helpers.add(options, 'axesHelper').onChange((e) => {
+        axesHelper.visible = e;
+    });
+
+    helpers.add(options, 'dLightHelper').onChange((e) => {
+        dLightHelper.visible = e;
+    });
+
+    const physics = options.gui.object.addFolder('Physics');
+
+    physics.add(options, 'gravity').onChange((e) => {
+        options.gravity = e;
+    });
+
+    physics.add(options.velocity, 'min').onChange((e) => {
+        options.velocity.min = e;
+    });
+
+    physics.add(options.velocity, 'max').onChange((e) => {
+        options.velocity.max = e;
+    });
 }
 
 function animate(tick){
@@ -182,7 +316,10 @@ window.addEventListener('resize', () => {
 const init = () => {
     createRoom();
     addObjectsToRoom();
+    controlObjects();
+    createInterface();
     renderer.setAnimationLoop(animate);
 };
 
 init();
+
