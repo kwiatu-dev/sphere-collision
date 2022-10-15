@@ -42,18 +42,20 @@ scene.add(axesHelper);
 const options = {
     count: 100,
     velocity: {
-        min: 0.005,
-        max: 0.01
+        min: 1,
+        max: 5
     },
     room: {
         object: null,
         size: 6,
-        segments: 10
+        segments: 10,
+        visible: true,
     },
     geometry: {
         object: null,
         segments: 3,
-        radius: 0.08,
+        radiusMin: 0.08,
+        radiusMax: 0.2,
     },
     control:{
         object: null,
@@ -74,8 +76,6 @@ const options = {
 options.gui['Reset objects'] = () => {
     resetObjects();
 };
-
-options.geometry.object = new THREE.IcosahedronGeometry(options.geometry.radius, options.geometry.segments);
 
 const createRoom = () => {
     options.room.object = new THREE.LineSegments(
@@ -116,11 +116,16 @@ function randomNegative(){
 
 const addObjectsToRoom = () => {
     for(let i = 0; i < options.count; i++){
-        const object = new THREE.Mesh(options.geometry.object, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
+        const radius = randomNumber(options.geometry.radiusMin, options.geometry.radiusMax);
+        const mass = radius * 10;
+        const geometry = new THREE.IcosahedronGeometry(radius, options.geometry.segments);
+        const object = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
+        object.userData.radius = radius;
+        object.userData.mass = mass;
 
-        object.position.x = randomNumber((-1 * options.room.size / 2) + options.geometry.radius, (options.room.size / 2) - options.geometry.radius);
-        object.position.y = randomNumber(0 + options.geometry.radius, options.room.size - options.geometry.radius);
-        object.position.z = randomNumber((-1 * options.room.size / 2) + options.geometry.radius, (options.room.size / 2) - options.geometry.radius);
+        object.position.x = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
+        object.position.y = randomNumber(0 + radius, options.room.size - radius);
+        object.position.z = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
 
         object.userData.velocity = new THREE.Vector3();
         object.userData.velocity.x = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
@@ -157,20 +162,21 @@ const moveObjects = (delta) =>{
 
         controlBoxCollision(object);
         controlObjectCollision(object);
-        addGravity(object, delta);
+        //addGravity(object, delta);
     }
 }
 
 const controlBoxCollision = (object) =>{
-    const range = (options.room.size / 2) - options.geometry.radius;
+    const radius = object.userData.radius;
+    const range = (options.room.size / 2) - radius;
 
     if(object.position.x < - range || object.position.x > range){
         object.position.x = THREE.MathUtils.clamp(object.position.x, - range, range);
         object.userData.velocity.x = - object.userData.velocity.x;
     }
 
-    if(object.position.y < options.geometry.radius || object.position.y > options.room.size - options.geometry.radius){
-        object.position.y = THREE.MathUtils.clamp(object.position.y, options.geometry.radius, options.room.size - options.geometry.radius);
+    if(object.position.y < radius || object.position.y > options.room.size - radius){
+        object.position.y = THREE.MathUtils.clamp(object.position.y, radius, options.room.size - radius);
         object.userData.velocity.y *= -0.8; 
         object.userData.velocity.x *= 0.98; 
         object.userData.velocity.z *= 0.98; 
@@ -181,29 +187,34 @@ const controlBoxCollision = (object) =>{
         object.userData.velocity.z = - object.userData.velocity.z;
     }
 }
-
+let distance = null;
 let normal = new THREE.Vector3();
-let relativeVelocity = new THREE.Vector3();
+let u1 = new THREE.Vector3();
+let u2 = new THREE.Vector3();
+let v1 = new THREE.Vector3();
+let v2 = new THREE.Vector3();
 
 const controlObjectCollision = (object) => {
     for(const potentialIntersect of options.room.object.children){
         normal.copy(object.position).sub(potentialIntersect.position);
+        distance = normal.length();
 
-        const distance = normal.length();
-
-        if(distance < options.geometry.radius * 2){
-            normal.multiplyScalar( 0.5 * distance - options.geometry.radius );
-            object.position.sub( normal );
-            potentialIntersect.position.add( normal );
-
+        if(distance < potentialIntersect.userData.radius + object.userData.radius){
+            normal.multiplyScalar(distance - (potentialIntersect.userData.radius + object.userData.radius));
+            object.position.sub(normal);
+            potentialIntersect.position.add(normal);
             normal.normalize();
 
-            relativeVelocity.copy( object.userData.velocity ).sub( potentialIntersect.userData.velocity );
+            u1.copy(object.userData.velocity).multiplyScalar(object.userData.mass - potentialIntersect.userData.mass);
+            u2.copy(potentialIntersect.userData.velocity).multiplyScalar(2 * potentialIntersect.userData.mass);
+            v1.addVectors(u1, u2).divideScalar(object.userData.mass + potentialIntersect.userData.mass);
 
-            normal = normal.multiplyScalar( relativeVelocity.dot( normal ) );
+            u2.copy(potentialIntersect.userData.velocity).multiplyScalar(potentialIntersect.userData.mass - object.userData.mass);
+            u1.copy(object.userData.velocity).multiplyScalar(2 * object.userData.mass);
+            v2.addVectors(u2, u1).divideScalar(object.userData.mass + potentialIntersect.userData.mass);
 
-            object.userData.velocity.sub( normal );
-            potentialIntersect.userData.velocity.add( normal );
+            object.userData.velocity.copy(v1);
+            potentialIntersect.userData.velocity.copy(v2);
         }
     }
 };
@@ -263,6 +274,16 @@ const createInterface = () => {
         resetObjects();
     });
 
+    objectControlls.add(options.geometry, 'radiusMin').onChange((e) => {
+        options.geometry.radiusMin = e;
+        resetObjects();
+    });
+
+    objectControlls.add(options.geometry, 'radiusMax').onChange((e) => {
+        options.geometry.radiusMax = e;
+        resetObjects();
+    });
+
     const roomControls = options.gui.object.addFolder('Room');
 
     roomControls.add(options.room, 'size').onChange((e) => {
@@ -273,6 +294,10 @@ const createInterface = () => {
     roomControls.add(options.room, 'segments').onChange((e) => {
         options.room.segments = e;
         resetRoom();
+    });
+
+    roomControls.add(options.room, 'visible').onChange((e) => {
+        options.room.object.material.visible = e;
     });
 
     const helpers = options.gui.object.addFolder('Helpers');
@@ -313,13 +338,66 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+const momentumTest = () => {
+    const radius1 = 0.5;
+    const mass1 = radius1 * 10;
+    const geometry1 = new THREE.IcosahedronGeometry(radius1, options.geometry.segments);
+    const object1 = new THREE.Mesh(geometry1, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
+    object1.userData.radius = radius1;
+    object1.userData.mass = mass1;
+
+    object1.position.x = -1;
+    object1.position.y = options.room.size / 2;
+    object1.position.z = 0;
+
+    object1.userData.velocity = new THREE.Vector3();
+    object1.userData.velocity.x = 0.5
+    object1.userData.velocity.y = 0
+    object1.userData.velocity.z = 0
+    object1.userData.hold = false;
+
+    options.room.object.add(object1);
+    object1.castShadow = true;
+    object1.receiveShadow = true;
+
+    const radius2 = 0.2;
+    const mass2 = radius2 * 10;
+    const geometry2 = new THREE.IcosahedronGeometry(radius2, options.geometry.segments);
+    const object2 = new THREE.Mesh(geometry2, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
+    object2.userData.radius = radius2;
+    object2.userData.mass = mass2;
+
+    object2.position.x = options.room.size / 8;
+    object2.position.y = options.room.size / 2;
+    object2.position.z = 0;
+
+    object2.userData.velocity = new THREE.Vector3();
+    object2.userData.velocity.x = -0.1;
+    object2.userData.velocity.y = 0
+    object2.userData.velocity.z = 0
+    object2.userData.hold = false;
+
+    options.room.object.add(object2);
+    object2.castShadow = true;
+    object2.receiveShadow = true;
+}
+
 const init = () => {
     createRoom();
-    addObjectsToRoom();
-    controlObjects();
-    createInterface();
+    //addObjectsToRoom();
+    //controlObjects();
+    //createInterface();
+    momentumTest();
     renderer.setAnimationLoop(animate);
 };
 
 init();
+
+/**
+ * TODO
+ * 1. Różne rozmiary kulek (x)
+ * 2. Dodawanie kulek w wybranym miejscu za pomocą kursura
+ * 3. Wstawić na środek jakiś ciekawy model 
+ * 4. Odbijać kulki od modelu na środku 
+ */
 
