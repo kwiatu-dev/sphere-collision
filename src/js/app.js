@@ -3,6 +3,10 @@ import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import * as dat from 'dat.gui';
 import {BoxLineGeometry} from 'three/examples/jsm/geometries/BoxLineGeometry.js';
 import { DragControls } from 'three/examples/jsm/controls/DragControls.js';
+import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+const VehicleModel = new URL('../3d/Hennesey Venom F5.glb', import.meta.url);
+const GLTFAssetLoader = new GLTFLoader();
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -24,16 +28,16 @@ const hemisphereLight = new THREE.HemisphereLight(0x606060, 0x404040)
 scene.add(hemisphereLight);
 
 const light = new THREE.DirectionalLight(0xffffff, 0.8);
-light.position.set(1, 1, 3);
+light.position.set(4, 5, 3);
 scene.add(light);
 light.castShadow = true;
 
 light.shadow.mapSize.width = 2048;
 light.shadow.mapSize.height = 2048; 
 light.shadow.camera.near = 0.1; 
-light.shadow.camera.far = 10; 
+light.shadow.camera.far = 12; 
 
-const dLightHelper = new THREE.DirectionalLightHelper(light, 5);
+const dLightHelper = new THREE.DirectionalLightHelper(light, 2);
 scene.add(dLightHelper);
 
 const axesHelper = new THREE.AxesHelper(10);
@@ -62,6 +66,9 @@ const options = {
     },
     gui:{
         object: null,
+    },
+    vehilce: {
+        boundingBox: new THREE.Box3(),
     },
     shadows: true,
     directLightIntensity: 0.8,
@@ -162,7 +169,7 @@ const moveObjects = (delta) =>{
 
         controlBoxCollision(object);
         controlObjectCollision(object);
-        //addGravity(object, delta);
+        addGravity(object, delta);
     }
 }
 
@@ -382,22 +389,47 @@ const momentumTest = () => {
     object2.receiveShadow = true;
 }
 
-const init = () => {
+const loadVehicleModel = (gltf) =>{
+    const model = gltf.scene;
+    scene.add(model);
+    model.position.set(0,(44.9 * 0.5));
+    model.getObjectByName('body_02_body_0_body_0_1').material.color.r = Math.random();
+    model.getObjectByName('body_02_body_0_body_0_1').material.color.g = Math.random();
+    model.getObjectByName('body_02_body_0_body_0_1').material.color.b = Math.random();
+    model.rotateY(Math.PI * 1);
+
+    model.traverse((node) => {
+        if(node.isMesh){
+            node.castShadow = true;
+        }
+    });
+
+    model.scale.set(.5, .5, .5);
+    options.vehilce.boundingBox.setFromObject(model);
+    console.log(options.vehilce.boundingBox);
+}
+
+const init = (gltf) => {
     createRoom();
-    //addObjectsToRoom();
-    //controlObjects();
-    //createInterface();
-    momentumTest();
+    loadVehicleModel(gltf);
+    addObjectsToRoom();
+    controlObjects();
+    createInterface();
+
+    //momentumTest();
     renderer.setAnimationLoop(animate);
 };
 
-init();
+GLTFAssetLoader.load(VehicleModel.href, init, undefined, (error) => {
+    console.error(error);
+});
+
 
 /**
  * TODO
  * 1. Różne rozmiary kulek (x)
  * 2. Dodawanie kulek w wybranym miejscu za pomocą kursura
- * 3. Wstawić na środek jakiś ciekawy model 
- * 4. Odbijać kulki od modelu na środku 
+ * 3. Wstawić na środek jakiś ciekawy model (x)
+ * 4. Odbijać kulki od modelu na środku
  */
 
