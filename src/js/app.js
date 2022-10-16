@@ -44,7 +44,7 @@ const axesHelper = new THREE.AxesHelper(10);
 scene.add(axesHelper);
 
 const options = {
-    count: 100,
+    count: 2,
     velocity: {
         min: 1,
         max: 5
@@ -141,6 +141,7 @@ const addObjectsToRoom = () => {
         object.userData.hold = false;
 
         options.room.object.add(object);
+        object.userData.bb = new THREE.Sphere(object.position, radius);
         object.castShadow = true;
         object.receiveShadow = true;
     }
@@ -169,6 +170,7 @@ const moveObjects = (delta) =>{
 
         controlBoxCollision(object);
         controlObjectCollision(object);
+        controlVehicleCollision(object);
         addGravity(object, delta);
     }
 }
@@ -225,6 +227,15 @@ const controlObjectCollision = (object) => {
         }
     }
 };
+
+const controlVehicleCollision = (object) =>{
+    const objectBB = object.userData.bb;
+    const vehilceBB = options.vehilce.boundingBox;
+
+    if(objectBB.intersectsBox(vehilceBB)){
+        //Wykonaj po zderzeniu
+    }
+}
 
 const addGravity = (object, delta) => {
     if(object.userData.hold === false){
@@ -406,7 +417,6 @@ const loadVehicleModel = (gltf) =>{
 
     model.scale.set(.5, .5, .5);
     options.vehilce.boundingBox.setFromObject(model);
-    console.log(options.vehilce.boundingBox);
 }
 
 const init = (gltf) => {
