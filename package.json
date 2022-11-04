@@ -12,11 +12,10 @@
   "devDependencies": {
     "@parcel/transformer-sass": "^2.7.0",
     "cannon-es": "^0.20.0",
+    "cannon-es-debugger": "^1.0.0",
     "dat.gui": "^0.7.9",
     "parcel": "latest",
     "three": "^0.145.0"
   },
-  "dependencies": {
-    "cannon-es-debugger": "^1.0.0"
-  }
+  "dependencies": {}
 }

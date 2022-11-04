@@ -41,9 +41,11 @@ light.shadow.camera.far = 12;
 
 const dLightHelper = new THREE.DirectionalLightHelper(light, 2);
 scene.add(dLightHelper);
+dLightHelper.visible = false;
 
 const axesHelper = new THREE.AxesHelper(10);
 scene.add(axesHelper);
+axesHelper.visible = false;
 
 const options = {
     count: 20,
@@ -73,13 +75,13 @@ const options = {
         object: null,
     },
     vehilce: {
-        boundingBox: new THREE.Box3(),
+        cannonMaterial: new CANNON.Material()
     },
     shadows: true,
     directLightIntensity: 0.8,
     hemisphereLightIntensity: 1,
-    axesHelper: true,
-    dLightHelper: true,
+    axesHelper: false,
+    dLightHelper: false,
     gravity: 9.8,
     orbitControl: true,
     dragControl: true,
@@ -88,7 +90,6 @@ const options = {
 const world = new CANNON.World({
     gravity: new CANNON.Vec3(0, -options.gravity, 0),
 });
-
 
 const sphereContantRoom = new CANNON.ContactMaterial(
     options.room.cannonMaterial,
@@ -101,6 +102,12 @@ const sphereContantSphere = new CANNON.ContactMaterial(
     options.geometry.cannonMaterial,
     { restitution: .9 }
 );
+
+const sphereContactVehicle = new CANNON.ContactMaterial(
+    options.geometry.cannonMaterial,
+    options.vehilce.cannonMaterial,
+    { restitution: .9 }
+)
 
 options.gui['Reset objects'] = () => {
     resetObjects();
@@ -186,7 +193,7 @@ const addObjectsToRoom = () => {
         object.userData.mass = mass;
         
         object.position.x = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
-        object.position.y = randomNumber(0 + radius, options.room.size - radius);
+        object.position.y = randomNumber(1 + radius, options.room.size - radius);
         object.position.z = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
 
         const objectVelocity = new CANNON.Vec3(
@@ -199,6 +206,7 @@ const addObjectsToRoom = () => {
         options.room.object.add(object);
         object.castShadow = true;
         object.receiveShadow = true;
+        object.userData.i = i;
 
         //CANNON OBJECT BODY
         object.userData.cannon = new CANNON.Body({
@@ -228,23 +236,56 @@ const resetObjects = () => {
     addObjectsToRoom();
 }
 
-const clock = new THREE.Clock();
+const controlBoxOut = (object) =>{
+    const radius = object.userData.radius;
+    const range = (options.room.size / 2) - radius;
+
+    if(object.position.x < - range || object.position.x > range){
+        object.position.x = THREE.MathUtils.clamp(object.position.x, - range, range);
+        return true;
+    }
+
+    if(object.position.y < radius || object.position.y > options.room.size - radius){
+        object.position.y = THREE.MathUtils.clamp(object.position.y, radius, options.room.size - radius);
+        return true;
+    }
+
+    if(object.position.z < - range || object.position.z > range){
+        object.position.z = THREE.MathUtils.clamp(object.position.z, - range, range);
+        return true;
+    }
+
+    return false;
+}
 
 const moveObjects = () =>{
     for(const object of options.room.object.children){
-        object.position.copy(object.userData.cannon.position);
-        object.quaternion.copy(object.userData.cannon.quaternion);
+        if(object.userData.i === draggingId){
+            if(controlBoxOut(object) === false){
+                object.userData.cannon.position.copy(object.position);
+                object.userData.cannon.quaternion.copy(object.quaternion);
+            }
+        }
+        else{
+            object.position.copy(object.userData.cannon.position);
+            object.quaternion.copy(object.userData.cannon.quaternion);
+        }
     }
 }
+
+let draggingId = -1;
 
 const dragStartCallback = (_event) => {
     _event.object.userData.hold = true;
     orbit.enabled = false;
+    draggingId = _event.object.userData.i;
 }
 
 const dragEndCallback = (_event) => {
     _event.object.userData.hold = false;
     orbit.enabled = options.orbitControl ? true : false;
+    _event.object.userData.cannon.velocity = new CANNON.Vec3(0,0,0); 
+    draggingId = -1;
 }
 
 const controlObjects = () =>{
@@ -344,11 +385,13 @@ const createInterface = () => {
 }
 
 //const cannonDebugger = new CannonDebugger(scene, world, {});
+const clock = new THREE.Clock()
+let delta
 
 function animate(tick){
-    const delta = clock.getDelta();
-    moveObjects(delta);
+    delta = Math.min(clock.getDelta(), 0.1)
     world.fixedStep();
+    moveObjects(delta);
     //cannonDebugger.update();
     renderer.render(scene, camera);
 }
@@ -375,7 +418,9 @@ const loadVehicleModel = (gltf) =>{
     });
 
     model.scale.set(.5, .5, .5);
-    options.vehilce.boundingBox.setFromObject(model);
+    const vehicleBB = new CANNON.Box(new CANNON.Vec3(0.5357977826044877,0.6064047883406146,1.2416590960797127));
+    const vehilceBody = new CANNON.Body({type: CANNON.Body.STATIC, shape: vehicleBB, material: options.vehilce.cannonMaterial});
+    world.addBody(vehilceBody);
 }
 
 const init = (gltf) => {
@@ -384,8 +429,8 @@ const init = (gltf) => {
     addObjectsToRoom();
     world.addContactMaterial(sphereContantRoom);
     world.addContactMaterial(sphereContantSphere);
-
-    //controlObjects();
+    world.addContactMaterial(sphereContactVehicle);
+    controlObjects();
     createInterface();
 
     renderer.setAnimationLoop(animate);
@@ -401,6 +446,7 @@ GLTFAssetLoader.load(VehicleModel.href, init, undefined, (error) => {
  * 1. Różne rozmiary kulek (x)
  * 2. Dodawanie kulek w wybranym miejscu za pomocą kursura
  * 3. Wstawić na środek jakiś ciekawy model (x)
- * 4. Odbijać kulki od modelu na środku
+ * 4. Odbijać kulki od modelu na środku (x)
+ * 5. Prouszanie pojazdem
  */
 
