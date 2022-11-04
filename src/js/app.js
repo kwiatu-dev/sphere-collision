@@ -4,6 +4,8 @@ import * as dat from 'dat.gui';
 import {BoxLineGeometry} from 'three/examples/jsm/geometries/BoxLineGeometry.js';
 import { DragControls } from 'three/examples/jsm/controls/DragControls.js';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as CANNON from 'cannon-es';
+import CannonDebugger from 'cannon-es-debugger';
 
 const VehicleModel = new URL('../3d/Hennesey Venom F5.glb', import.meta.url);
 const GLTFAssetLoader = new GLTFLoader();
@@ -44,7 +46,7 @@ const axesHelper = new THREE.AxesHelper(10);
 scene.add(axesHelper);
 
 const options = {
-    count: 2,
+    count: 20,
     velocity: {
         min: 1,
         max: 5
@@ -54,12 +56,15 @@ const options = {
         size: 6,
         segments: 10,
         visible: true,
+        cannonMaterial: new CANNON.Material()
     },
     geometry: {
         object: null,
         segments: 3,
         radiusMin: 0.08,
         radiusMax: 0.2,
+        wireframe: false,
+        cannonMaterial: new CANNON.Material()
     },
     control:{
         object: null,
@@ -80,6 +85,23 @@ const options = {
     dragControl: true,
 }
 
+const world = new CANNON.World({
+    gravity: new CANNON.Vec3(0, -options.gravity, 0),
+});
+
+
+const sphereContantRoom = new CANNON.ContactMaterial(
+    options.room.cannonMaterial,
+    options.geometry.cannonMaterial,
+    { restitution: .7, friction: .5 }
+);
+
+const sphereContantSphere = new CANNON.ContactMaterial(
+    options.geometry.cannonMaterial,
+    options.geometry.cannonMaterial,
+    { restitution: .9 }
+);
+
 options.gui['Reset objects'] = () => {
     resetObjects();
 };
@@ -99,6 +121,39 @@ const createRoom = () => {
     scene.add(plane);
     plane.rotateX(-0.5 * Math.PI);
     plane.receiveShadow = true;
+
+    //CANNON ROOM BODY
+    const planeShape = new CANNON.Box(new CANNON.Vec3(options.room.size / 2, options.room.size / 2, 0.1));
+    const groundBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(0, 0 - (.2 / 2),  0), material: options.room.cannonMaterial });
+    groundBody.quaternion.setFromEuler(Math.PI / 2, 0, 0);
+    world.addBody(groundBody);
+
+    const leftWallBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(-options.room.size / 2 - (.2 / 2), options.room.size / 2,  0), material: options.room.cannonMaterial });
+    leftWallBody.quaternion.setFromEuler(0, Math.PI / 2, 0);
+    world.addBody(leftWallBody);
+
+    const rightWallBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(options.room.size / 2 + (.2 / 2), options.room.size / 2,  0), material: options.room.cannonMaterial });
+    rightWallBody.quaternion.setFromEuler(0, Math.PI / 2, 0);
+    world.addBody(rightWallBody);
+
+    const backWallBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(0, options.room.size / 2,  -options.room.size / 2 - (.2 / 2)), material: options.room.cannonMaterial });
+    world.addBody(backWallBody);
+
+    const frontWallBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(0, options.room.size / 2,  options.room.size / 2 + (.2 / 2)), material: options.room.cannonMaterial });
+    world.addBody(frontWallBody);
+
+    const topWallBody = new CANNON.Body({ type: CANNON.Body.STATIC, shape: planeShape, position: new CANNON.Vec3(0, options.room.size + (.2 / 2),  0), material: options.room.cannonMaterial });
+    topWallBody.quaternion.setFromEuler(Math.PI / 2, 0, 0);
+    world.addBody(topWallBody);
+
+    /*
+    const boxGeometry = new THREE.BoxGeometry(options.room.size, options.room.size, .2);
+    const boxMaterial = new THREE.MeshBasicMaterial({color: '#fff000', side: THREE.DoubleSide});
+    const box = new THREE.Mesh(boxGeometry, boxMaterial);
+    scene.add(box);
+    box.position.copy(groundBody.position);
+    box.quaternion.copy(groundBody.quaternion);
+    */
 }
 
 const removeRoom = () => {
@@ -125,25 +180,40 @@ const addObjectsToRoom = () => {
     for(let i = 0; i < options.count; i++){
         const radius = randomNumber(options.geometry.radiusMin, options.geometry.radiusMax);
         const mass = radius * 10;
-        const geometry = new THREE.IcosahedronGeometry(radius, options.geometry.segments);
-        const object = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
+        const geometry = new THREE.SphereGeometry(radius);
+        const object = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF, wireframe: options.geometry.wireframe}));
         object.userData.radius = radius;
         object.userData.mass = mass;
-
+        
         object.position.x = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
         object.position.y = randomNumber(0 + radius, options.room.size - radius);
         object.position.z = randomNumber((-1 * options.room.size / 2) + radius, (options.room.size / 2) - radius);
 
-        object.userData.velocity = new THREE.Vector3();
-        object.userData.velocity.x = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
-        object.userData.velocity.y = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
-        object.userData.velocity.z = randomNumber(options.velocity.min, options.velocity.max) * randomNegative();
-        object.userData.hold = false;
+        const objectVelocity = new CANNON.Vec3(
+            randomNumber(options.velocity.min, options.velocity.max) * randomNegative(),
+            randomNumber(options.velocity.min, options.velocity.max) * randomNegative(),
+            randomNumber(options.velocity.min, options.velocity.max) * randomNegative()
+        );
 
+        object.userData.hold = false;
         options.room.object.add(object);
-        object.userData.bb = new THREE.Sphere(object.position, radius);
         object.castShadow = true;
         object.receiveShadow = true;
+
+        //CANNON OBJECT BODY
+        object.userData.cannon = new CANNON.Body({
+            mass: mass,
+            shape: new CANNON.Sphere(radius),
+            type: CANNON.Body.DYNAMIC,
+            velocity: objectVelocity.clone(),
+            material: options.geometry.cannonMaterial,
+            linearDamping: .2,
+            angularDamping: .2
+        });
+
+        object.userData.cannon.position.copy(object.position);
+        object.userData.cannon.quaternion.copy(object.quaternion);
+        world.addBody(object.userData.cannon);
     }
 }
 
@@ -160,86 +230,10 @@ const resetObjects = () => {
 
 const clock = new THREE.Clock();
 
-const moveObjects = (delta) =>{
+const moveObjects = () =>{
     for(const object of options.room.object.children){
-        if(object.userData.hold === false){
-            object.position.x += object.userData.velocity.x * delta;
-            object.position.y += object.userData.velocity.y * delta;
-            object.position.z += object.userData.velocity.z * delta;
-        }
-
-        controlBoxCollision(object);
-        controlObjectCollision(object);
-        controlVehicleCollision(object);
-        addGravity(object, delta);
-    }
-}
-
-const controlBoxCollision = (object) =>{
-    const radius = object.userData.radius;
-    const range = (options.room.size / 2) - radius;
-
-    if(object.position.x < - range || object.position.x > range){
-        object.position.x = THREE.MathUtils.clamp(object.position.x, - range, range);
-        object.userData.velocity.x = - object.userData.velocity.x;
-    }
-
-    if(object.position.y < radius || object.position.y > options.room.size - radius){
-        object.position.y = THREE.MathUtils.clamp(object.position.y, radius, options.room.size - radius);
-        object.userData.velocity.y *= -0.8; 
-        object.userData.velocity.x *= 0.98; 
-        object.userData.velocity.z *= 0.98; 
-    }
-
-    if(object.position.z < - range || object.position.z > range){
-        object.position.z = THREE.MathUtils.clamp(object.position.z, - range, range);
-        object.userData.velocity.z = - object.userData.velocity.z;
-    }
-}
-let distance = null;
-let normal = new THREE.Vector3();
-let u1 = new THREE.Vector3();
-let u2 = new THREE.Vector3();
-let v1 = new THREE.Vector3();
-let v2 = new THREE.Vector3();
-
-const controlObjectCollision = (object) => {
-    for(const potentialIntersect of options.room.object.children){
-        normal.copy(object.position).sub(potentialIntersect.position);
-        distance = normal.length();
-
-        if(distance < potentialIntersect.userData.radius + object.userData.radius){
-            normal.multiplyScalar(distance - (potentialIntersect.userData.radius + object.userData.radius));
-            object.position.sub(normal);
-            potentialIntersect.position.add(normal);
-            normal.normalize();
-
-            u1.copy(object.userData.velocity).multiplyScalar(object.userData.mass - potentialIntersect.userData.mass);
-            u2.copy(potentialIntersect.userData.velocity).multiplyScalar(2 * potentialIntersect.userData.mass);
-            v1.addVectors(u1, u2).divideScalar(object.userData.mass + potentialIntersect.userData.mass);
-
-            u2.copy(potentialIntersect.userData.velocity).multiplyScalar(potentialIntersect.userData.mass - object.userData.mass);
-            u1.copy(object.userData.velocity).multiplyScalar(2 * object.userData.mass);
-            v2.addVectors(u2, u1).divideScalar(object.userData.mass + potentialIntersect.userData.mass);
-
-            object.userData.velocity.copy(v1);
-            potentialIntersect.userData.velocity.copy(v2);
-        }
-    }
-};
-
-const controlVehicleCollision = (object) =>{
-    const objectBB = object.userData.bb;
-    const vehilceBB = options.vehilce.boundingBox;
-
-    if(objectBB.intersectsBox(vehilceBB)){
-        //Wykonaj po zderzeniu
-    }
-}
-
-const addGravity = (object, delta) => {
-    if(object.userData.hold === false){
-        object.userData.velocity.y -= options.gravity * delta;
+        object.position.copy(object.userData.cannon.position);
+        object.quaternion.copy(object.userData.cannon.quaternion);
     }
 }
 
@@ -302,6 +296,11 @@ const createInterface = () => {
         resetObjects();
     });
 
+    objectControlls.add(options.geometry, 'wireframe').onChange((e) => {
+        options.geometry.wireframe = e;
+        resetObjects();
+    });
+
     const roomControls = options.gui.object.addFolder('Room');
 
     roomControls.add(options.room, 'size').onChange((e) => {
@@ -332,6 +331,7 @@ const createInterface = () => {
 
     physics.add(options, 'gravity').onChange((e) => {
         options.gravity = e;
+        world.gravity = new CANNON.Vec3(0, -options.gravity, 0);
     });
 
     physics.add(options.velocity, 'min').onChange((e) => {
@@ -343,10 +343,13 @@ const createInterface = () => {
     });
 }
 
+//const cannonDebugger = new CannonDebugger(scene, world, {});
+
 function animate(tick){
     const delta = clock.getDelta();
     moveObjects(delta);
-
+    world.fixedStep();
+    //cannonDebugger.update();
     renderer.render(scene, camera);
 }
 
@@ -355,50 +358,6 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-const momentumTest = () => {
-    const radius1 = 0.5;
-    const mass1 = radius1 * 10;
-    const geometry1 = new THREE.IcosahedronGeometry(radius1, options.geometry.segments);
-    const object1 = new THREE.Mesh(geometry1, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
-    object1.userData.radius = radius1;
-    object1.userData.mass = mass1;
-
-    object1.position.x = -1;
-    object1.position.y = options.room.size / 2;
-    object1.position.z = 0;
-
-    object1.userData.velocity = new THREE.Vector3();
-    object1.userData.velocity.x = 0.5
-    object1.userData.velocity.y = 0
-    object1.userData.velocity.z = 0
-    object1.userData.hold = false;
-
-    options.room.object.add(object1);
-    object1.castShadow = true;
-    object1.receiveShadow = true;
-
-    const radius2 = 0.2;
-    const mass2 = radius2 * 10;
-    const geometry2 = new THREE.IcosahedronGeometry(radius2, options.geometry.segments);
-    const object2 = new THREE.Mesh(geometry2, new THREE.MeshLambertMaterial({color: Math.random() * 0xFFFFFF}));
-    object2.userData.radius = radius2;
-    object2.userData.mass = mass2;
-
-    object2.position.x = options.room.size / 8;
-    object2.position.y = options.room.size / 2;
-    object2.position.z = 0;
-
-    object2.userData.velocity = new THREE.Vector3();
-    object2.userData.velocity.x = -0.1;
-    object2.userData.velocity.y = 0
-    object2.userData.velocity.z = 0
-    object2.userData.hold = false;
-
-    options.room.object.add(object2);
-    object2.castShadow = true;
-    object2.receiveShadow = true;
-}
 
 const loadVehicleModel = (gltf) =>{
     const model = gltf.scene;
@@ -423,10 +382,12 @@ const init = (gltf) => {
     createRoom();
     loadVehicleModel(gltf);
     addObjectsToRoom();
-    controlObjects();
+    world.addContactMaterial(sphereContantRoom);
+    world.addContactMaterial(sphereContantSphere);
+
+    //controlObjects();
     createInterface();
 
-    //momentumTest();
     renderer.setAnimationLoop(animate);
 };
 
