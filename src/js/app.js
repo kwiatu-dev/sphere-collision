@@ -508,6 +508,7 @@ const createVehicle = (vehicleDimensions) => {
     const carBody = new CANNON.Body({
         mass: 5,
         position: new CANNON.Vec3(0, 1, 0),
+        material: options.vehilce.cannonMaterial
     });
 
     carBody.addShape(carShape, centerOfMassAdjust);
@@ -526,27 +527,31 @@ const createVehicle = (vehicleDimensions) => {
         material: wheelMaterial,
         angularDamping: .4,
         shape: wheelShape,
+        material: options.vehilce.cannonMaterial
     });
 
     const rightFrontWheel = new CANNON.Body({
         mass: 1, 
         material: wheelMaterial,
         angularDamping: .4,
-        shape: wheelShape
+        shape: wheelShape,
+        material: options.vehilce.cannonMaterial
     });
 
     const leftBackWheel = new CANNON.Body({
         mass: 1, 
         material: wheelMaterial,
         angularDamping: .4,
-        shape: wheelShape
+        shape: wheelShape,
+        material: options.vehilce.cannonMaterial
     });
 
     const rightBackWheel = new CANNON.Body({
         mass: 1, 
         material: wheelMaterial,
         angularDamping: .4,
-        shape: wheelShape
+        shape: wheelShape,
+        material: options.vehilce.cannonMaterial
     });
 
     vehicle.addWheel({
@@ -646,15 +651,12 @@ const createVehicle = (vehicleDimensions) => {
 }
 
 let angularVelocity; 
-let velocity;
 
 const moveVehicle = (delta) => {
     options.vehilce.model.position.copy(options.vehilce.cannon.chassisBody.position.clone().vadd(new CANNON.Vec3(0, -.2, 0)));
     options.vehilce.model.quaternion.copy(options.vehilce.cannon.chassisBody.quaternion);
 
     angularVelocity = options.vehilce.cannon.wheelBodies[0].angularVelocity.length();
-    velocity = options.vehilce.cannon.chassisBody.velocity;
-
 
     options.vehilce.wheelFrontFelgaLeft.rotateX(angularVelocity * delta);
     options.vehilce.wheelFrontFelgaRight.rotateX(angularVelocity * delta);
@@ -692,5 +694,6 @@ GLTFAssetLoader.load(VehicleModel.href, init, undefined, (error) => {
  * 4. Odbijać kulki od modelu na środku (x)
  * 5. Prouszanie pojazdem (x)
  * 6. Resetowanie pokoju ma restetować dodane ściany w cannon js (x)
+ * 7. Odpowiednie poruszanie kołami
  */
 
