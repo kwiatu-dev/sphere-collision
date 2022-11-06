@@ -96,6 +96,7 @@ const options = {
         wheelBackOponaRight: null,
         wheelBackFelgaLeft: null,
         wheelBackFelgaRight: null,
+        steeringWheels: 0,
     },
     shadows: true,
     directLightIntensity: 0.8,
@@ -430,7 +431,7 @@ const createInterface = () => {
     });
 }
 
-const cannonDebugger = new CannonDebugger(scene, world, {});
+//const cannonDebugger = new CannonDebugger(scene, world, {});
 const clock = new THREE.Clock()
 let delta
 
@@ -439,7 +440,7 @@ function animate(tick){
     world.step(delta);
     moveObjects(delta);
     moveVehicle(delta);
-    cannonDebugger.update();
+    //cannonDebugger.update();
     renderer.render(scene, camera);
 }
 
@@ -478,23 +479,6 @@ const loadVehicleModel = (gltf) =>{
     options.vehilce.model.scale.set(.5, .5, .5);
     const vehicleDimensions = new THREE.Box3().setFromObject(options.vehilce.model);
     createVehicle(vehicleDimensions);
-}
-
-const steeringWheels = (deg) => {
-    options.vehilce.wheelFrontOponaLeft.rotation.z = 0;
-    options.vehilce.wheelFrontOponaRight.rotation.z = 0;
-    options.vehilce.wheelFrontFelgaLeft.rotation.z = 0;
-    options.vehilce.wheelFrontFelgaRight.rotation.z = 0;
-
-    options.vehilce.wheelFrontOponaLeft.rotation.y = -deg;
-    options.vehilce.wheelFrontOponaRight.rotation.y = -deg;
-    options.vehilce.wheelFrontFelgaLeft.rotation.y = -deg;
-    options.vehilce.wheelFrontFelgaRight.rotation.y = -deg;
-
-    options.vehilce.wheelFrontOponaLeft.rotation.x = 0;
-    options.vehilce.wheelFrontOponaRight.rotation.x = 0;
-    options.vehilce.wheelFrontFelgaLeft.rotation.x = 0;
-    options.vehilce.wheelFrontFelgaRight.rotation.x = 0;
 }
 
 const createVehicle = (vehicleDimensions) => {
@@ -668,13 +652,20 @@ const moveVehicle = (delta) => {
     options.vehilce.wheelBackOponaRight.rotateX(angularVelocity * delta);
 }
 
+const steeringWheels = (deg) => {
+    options.vehilce.wheelFrontOponaLeft.rotation.z = deg;
+    options.vehilce.wheelFrontFelgaLeft.rotation.z = deg;
+    options.vehilce.wheelFrontFelgaRight.rotation.z = deg;
+    options.vehilce.wheelFrontOponaRight.rotation.z = deg;
+}
+
 const init = (gltf) => {
     createRoom();
     loadVehicleModel(gltf);
     addObjectsToRoom();
     world.addContactMaterial(sphereContantRoom);
     world.addContactMaterial(sphereContantSphere);
-    world.addContactMaterial(sphereContactVehicle);
+    //world.addContactMaterial(sphereContactVehicle);
     controlObjects();
     createInterface();
 
