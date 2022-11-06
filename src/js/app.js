@@ -431,7 +431,7 @@ const createInterface = () => {
     });
 }
 
-//const cannonDebugger = new CannonDebugger(scene, world, {});
+const cannonDebugger = new CannonDebugger(scene, world, {});
 const clock = new THREE.Clock()
 let delta
 
@@ -440,7 +440,7 @@ function animate(tick){
     world.step(delta);
     moveObjects(delta);
     moveVehicle(delta);
-    //cannonDebugger.update();
+    cannonDebugger.update();
     renderer.render(scene, camera);
 }
 
@@ -634,29 +634,41 @@ const createVehicle = (vehicleDimensions) => {
     });
 }
 
-let angularVelocity; 
+let angularVelocity;
+let angleX = 0, angleY = 0;
+let frontWheelElements, backWheelElements;
 
 const moveVehicle = (delta) => {
     options.vehilce.model.position.copy(options.vehilce.cannon.chassisBody.position.clone().vadd(new CANNON.Vec3(0, -.2, 0)));
     options.vehilce.model.quaternion.copy(options.vehilce.cannon.chassisBody.quaternion);
-
     angularVelocity = options.vehilce.cannon.wheelBodies[0].angularVelocity.length();
+    angleY = -options.vehilce.steeringWheels;
+    angleX += angularVelocity * delta;
 
-    options.vehilce.wheelFrontFelgaLeft.rotateX(angularVelocity * delta);
-    options.vehilce.wheelFrontFelgaRight.rotateX(angularVelocity * delta);
-    options.vehilce.wheelFrontOponaLeft.rotateX(angularVelocity * delta);
-    options.vehilce.wheelFrontOponaRight.rotateX(angularVelocity * delta);
-    options.vehilce.wheelBackFelgaLeft.rotateX(angularVelocity * delta);
-    options.vehilce.wheelBackFelgaRight.rotateX(angularVelocity * delta);
-    options.vehilce.wheelBackOponaLeft.rotateX(angularVelocity * delta);
-    options.vehilce.wheelBackOponaRight.rotateX(angularVelocity * delta);
+    backWheelElements = [options.vehilce.wheelBackFelgaLeft, options.vehilce.wheelBackFelgaRight,
+        options.vehilce.wheelBackOponaLeft, options.vehilce.wheelBackOponaRight];
+
+    backWheelElements.forEach((wheelElement) => {
+        wheelElement.rotateX(angularVelocity * delta);
+    });
+
+    frontWheelElements = [options.vehilce.wheelFrontFelgaLeft, options.vehilce.wheelFrontFelgaRight,
+        options.vehilce.wheelFrontOponaLeft, options.vehilce.wheelFrontOponaRight];
+
+    frontWheelElements.forEach(function (wheelElement) {
+        let vector = new THREE.Vector3(1, 0, 0);
+        vector.applyAxisAngle(new THREE.Vector3(0, 1, 0), angleY);
+
+        wheelElement.rotation.y = angleY;
+        wheelElement.rotation.x = 0;
+        wheelElement.rotation.z = 0;
+
+        wheelElement.rotateOnWorldAxis(vector, angleX);
+    });
 }
 
 const steeringWheels = (deg) => {
-    options.vehilce.wheelFrontOponaLeft.rotation.z = deg;
-    options.vehilce.wheelFrontFelgaLeft.rotation.z = deg;
-    options.vehilce.wheelFrontFelgaRight.rotation.z = deg;
-    options.vehilce.wheelFrontOponaRight.rotation.z = deg;
+    options.vehilce.steeringWheels = deg;
 }
 
 const init = (gltf) => {
