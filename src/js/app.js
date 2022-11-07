@@ -5,14 +5,13 @@ import { DragControls } from 'three/examples/jsm/controls/DragControls.js';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as CANNON from 'cannon-es';
 import CannonDebugger from 'cannon-es-debugger';
-import { Interface } from './interface/interface';
-
+import * as Interface from './interface/interface';
 class Game{
-    constructor(options){
+    constructor(options, gui){
         this.objects = {...options.objects};
         this.room = {...options.room};
         this.vehicle = {...options.vehicle};
-        this.gui = {...options.gui};
+        this.gui = {...gui};
 
         this.createRenderer();
         this.createScene();
@@ -552,8 +551,7 @@ class Game{
     }
 
     createInterface(){
-        this.interface = new Interface(this);
-        this.interface.loadInterface();
+        Interface.loadInterface(this);
     }
 
     removeVehicleBody(){
@@ -656,23 +654,9 @@ const options = {
     },
     vehicle: {
         url: new URL('../3d/Hennesey Venom F5.glb', import.meta.url),
-    },
-    gui:{
-        shadows: true,
-        directLightIntensity: 0.8,
-        hemisphereLightIntensity: 1,
-        axesHelper: false,
-        dLightHelper: false,
-        dLightShadowHelper: false,
-        gravity: 9.8,
-        orbitControl: true,
-        dragControl: true,
-        cannonDebugger: false,
-        objetcsWireframe: false,
-        roomVisible: true,
     }
 }
 
-const game = new Game(options);
+const game = new Game(options, Interface.gui);
 game.load();
 
